@@ -2,7 +2,7 @@ name: Go Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
@@ -14,7 +14,11 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - name: Checkout code
@@ -24,12 +28,25 @@ jobs:
       uses: actions/setup-go@v3
       with:
         go-version: '1.21'
+        cache: false
         
     - name: Install dependencies
-      run: go mod download
+      run: |
+        go mod download
+        go mod verify
+        
+    - name: Wait for Redis
+      run: |
+        timeout 30s bash -c 'until redis-cli -h localhost ping; do sleep 1; done' || exit 1
+        
+    - name: Run unit tests
+      run: go test -v -timeout=30s -run="^Test(New|Task|Queue|Worker|Backoff)" ./...
       
-    - name: Run tests
-      run: go test -v ./...
+    - name: Run integration tests
+      run: go test -v -timeout=60s -run="^TestIntegration" ./...
+      
+    - name: Run all tests with race detector
+      run: go test -race -timeout=60s ./...
       
     - name: Run linter
       uses: golangci/golangci-lint-action@v3
@@ -37,4 +54,4 @@ jobs:
         version: latest
         
     - name: Build
-      run: go build ./...
+      run: go build -v ./...

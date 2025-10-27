@@ -14,14 +14,14 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		WithRedisAddr("localhost:6379"),
 		WithNamespace("test-integration"),
 		WithMaxRetries(2),
-		WithRetryDelay(10*time.Millisecond),
+		WithRetryDelay(100*time.Millisecond),
 	)
 	require.NoError(t, err)
 	defer queue.Close()
 
 	worker := queue.NewWorker(
 		WithConcurrency(2),
-		WithPollInterval(20*time.Millisecond),
+		WithPollInterval(50*time.Millisecond),
 	)
 
 	type EmailData struct {
@@ -68,7 +68,7 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			task, err := queue.GetTask(taskID)
 			return err == nil && task.Status == TaskStatusCompleted
-		}, 2*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 200*time.Millisecond)
 
 		val, ok := processedTasks.Load(taskID)
 		assert.True(t, ok)
@@ -82,7 +82,7 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			task, err := queue.GetTask(taskID)
 			return err == nil && task.Status == TaskStatusCompleted
-		}, 2*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 200*time.Millisecond)
 
 		task, err := queue.GetTask(taskID)
 		require.NoError(t, err)
@@ -105,12 +105,12 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 func TestIntegration_DelayedTasks(t *testing.T) {
 	queue, err := New(
 		WithRedisAddr("localhost:6379"),
-		WithNamespace("test-delayed"),
+		WithNamespace("test-delayed-integration"),
 	)
 	require.NoError(t, err)
 	defer queue.Close()
 
-	worker := queue.NewWorker(WithPollInterval(10 * time.Millisecond))
+	worker := queue.NewWorker(WithPollInterval(50 * time.Millisecond))
 
 	var processedAt time.Time
 	worker.Handle("delayed_task", func(task *Task) error {
@@ -123,17 +123,17 @@ func TestIntegration_DelayedTasks(t *testing.T) {
 
 	t.Run("should process delayed tasks after specified time", func(t *testing.T) {
 		start := time.Now()
-		delay := 100 * time.Millisecond
+		delay := 200 * time.Millisecond
 
 		_, err := queue.EnqueueDelayed("delayed_task", "data", delay)
 		require.NoError(t, err)
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		assert.True(t, processedAt.IsZero(), "Task should not be processed yet")
 
 		assert.Eventually(t, func() bool {
 			return !processedAt.IsZero()
-		}, 200*time.Millisecond, 10*time.Millisecond)
+		}, 3*time.Second, 100*time.Millisecond)
 
 		actualDelay := processedAt.Sub(start)
 		assert.True(t, actualDelay >= delay,

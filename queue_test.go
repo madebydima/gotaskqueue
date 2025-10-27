@@ -136,7 +136,7 @@ func TestQueueRetryLogic(t *testing.T) {
 		WithRedisAddr("localhost:6379"),
 		WithNamespace("test-retry"),
 		WithMaxRetries(2),
-		WithRetryDelay(10*time.Millisecond),
+		WithRetryDelay(100*time.Millisecond),
 	)
 	require.NoError(t, err)
 	defer queue.Close()
@@ -152,7 +152,7 @@ func TestQueueRetryLogic(t *testing.T) {
 		err = queue.retryTask(task, errors.New("simulated failure"))
 		require.NoError(t, err)
 
-		time.Sleep(15 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 		queue.processDelayedTasks()
 
 		retriedTask, err := queue.dequeue("flaky_task")
@@ -275,5 +275,36 @@ func TestQueueCleanup(t *testing.T) {
 		count, err := queue.client.HLen(ctx, queue.key("tasks")).Result()
 		require.NoError(t, err)
 		assert.LessOrEqual(t, count, int64(2))
+	})
+}
+
+func TestQueueDelayedTasks(t *testing.T) {
+	queue, err := New(
+		WithRedisAddr("localhost:6379"),
+		WithNamespace("test-delayed-queue"),
+	)
+	require.NoError(t, err)
+	defer queue.Close()
+
+	t.Run("should process delayed tasks after specified time", func(t *testing.T) {
+		start := time.Now()
+		delay := 200 * time.Millisecond
+
+		taskID, err := queue.EnqueueDelayed("delayed_task", "data", delay)
+		require.NoError(t, err)
+
+		task, err := queue.dequeue("delayed_task")
+		require.NoError(t, err)
+		assert.Nil(t, task)
+
+		time.Sleep(delay + 50*time.Millisecond)
+
+		queue.processDelayedTasks()
+
+		task, err = queue.dequeue("delayed_task")
+		require.NoError(t, err)
+		require.NotNil(t, task)
+		assert.Equal(t, taskID, task.ID)
+		assert.WithinDuration(t, start.Add(delay), time.Now(), 100*time.Millisecond)
 	})
 }

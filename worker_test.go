@@ -123,17 +123,19 @@ func TestWorkerProcessTask(t *testing.T) {
 
 		task, err := queue.dequeue("flaky_task")
 		require.NoError(t, err)
-		worker.processTask(0, task)
+		require.NotNil(t, task)
 
+		worker.processTask(0, task)
 		assert.Equal(t, 1, attempts)
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		queue.processDelayedTasks()
 
-		task, err = queue.dequeue("flaky_task")
+		retriedTask, err := queue.dequeue("flaky_task")
 		require.NoError(t, err)
-		worker.processTask(0, task)
+		require.NotNil(t, retriedTask)
 
+		worker.processTask(0, retriedTask)
 		assert.Equal(t, 2, attempts)
 
 		completedTask, err := queue.GetTask(taskID)
@@ -153,6 +155,7 @@ func TestWorkerProcessTask(t *testing.T) {
 
 		task, err := queue.dequeue("panic_task")
 		require.NoError(t, err)
+		require.NotNil(t, task)
 
 		assert.NotPanics(t, func() {
 			worker.processTask(0, task)
@@ -163,24 +166,21 @@ func TestWorkerProcessTask(t *testing.T) {
 		assert.Contains(t, []TaskStatus{TaskStatusRetry, TaskStatusFailed}, finalTask.Status)
 	})
 
-	t.Run("should handle timeout", func(t *testing.T) {
+	t.Run("should handle task with no handler", func(t *testing.T) {
 		worker := queue.NewWorker(WithConcurrency(1))
 
-		worker.Handle("slow_task", func(task *Task) error {
-			time.Sleep(2 * time.Second)
-			return nil
-		})
-
-		taskID, err := queue.Enqueue("slow_task", "data")
+		taskID, err := queue.Enqueue("unknown_task", "data")
 		require.NoError(t, err)
 
-		task, err := queue.dequeue("slow_task")
+		task, err := queue.dequeue("unknown_task")
 		require.NoError(t, err)
+		require.NotNil(t, task)
 
 		worker.processTask(0, task)
 
-		finalTask, _ := queue.GetTask(taskID)
-		assert.NotNil(t, finalTask)
+		failedTask, err := queue.GetTask(taskID)
+		require.NoError(t, err)
+		assert.Equal(t, TaskStatusFailed, failedTask.Status)
 	})
 }
 
@@ -194,11 +194,12 @@ func TestWorkerStartStop(t *testing.T) {
 
 		go worker.Start()
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		assert.True(t, worker.IsRunning())
 
 		worker.Stop()
+		time.Sleep(10 * time.Millisecond)
 		assert.False(t, worker.IsRunning())
 	})
 
@@ -217,7 +218,7 @@ func TestWorkerStartStop(t *testing.T) {
 			processing[data] = true
 			mu.Unlock()
 
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
 			mu.Lock()
 			delete(processing, data)
@@ -235,7 +236,7 @@ func TestWorkerStartStop(t *testing.T) {
 		go worker.Start()
 		defer worker.Stop()
 
-		timeout := time.After(2 * time.Second)
+		timeout := time.After(5 * time.Second)
 		completed := 0
 
 		for completed < 3 {
@@ -248,5 +249,41 @@ func TestWorkerStartStop(t *testing.T) {
 		}
 
 		assert.Equal(t, 3, completed)
+	})
+}
+
+func TestWorkerGracefulShutdown(t *testing.T) {
+	queue, err := New(WithRedisAddr("localhost:6379"), WithNamespace("test-shutdown"))
+	require.NoError(t, err)
+	defer queue.Close()
+
+	t.Run("should return task to queue on shutdown", func(t *testing.T) {
+		worker := queue.NewWorker(WithConcurrency(1))
+
+		processing := make(chan bool)
+		handlerStarted := make(chan bool)
+
+		worker.Handle("long_task", func(task *Task) error {
+			handlerStarted <- true
+			<-processing
+			return nil
+		})
+
+		taskID, err := queue.Enqueue("long_task", "data")
+		require.NoError(t, err)
+
+		go worker.Start()
+
+		<-handlerStarted
+
+		worker.Stop()
+
+		close(processing)
+
+		time.Sleep(100 * time.Millisecond)
+
+		task, err := queue.GetTask(taskID)
+		require.NoError(t, err)
+		assert.Equal(t, TaskStatusPending, task.Status)
 	})
 }

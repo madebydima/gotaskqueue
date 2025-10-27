@@ -67,7 +67,6 @@ func main() {
 			log.Printf("Enqueued email task: %s", taskID)
 		}
 
-		// Каждая 3-я задача будет отложенной
 		if i%3 == 0 {
 			reportData := ReportData{
 				UserID:    fmt.Sprintf("user%d", i),

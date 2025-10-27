@@ -26,7 +26,6 @@ type DashboardData struct {
 }
 
 func (q *Queue) NewDashboard(addr string) *Dashboard {
-	// Парсим шаблоны при создании
 	tmpl := template.Must(template.New("dashboard").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format("02.01.2006 15:04:05")

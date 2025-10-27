@@ -145,6 +145,25 @@ func (w *Worker) processTasks(workerID int) error {
 }
 
 func (w *Worker) processTask(workerID int, task *Task) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Worker %d: panic recovered in processTask: %v", workerID, r)
+			if task != nil && w.queue != nil {
+				w.queue.failTask(task, fmt.Errorf("panic: %v", r))
+			}
+		}
+	}()
+
+	if task == nil {
+		log.Printf("Worker %d: received nil task", workerID)
+		return
+	}
+
+	if w.queue == nil {
+		log.Printf("Worker %d: queue is nil, cannot process task %s", workerID, task.ID)
+		return
+	}
+
 	log.Printf("Worker %d: processing task %s of type %s", workerID, task.ID, task.Type)
 
 	handler, exists := w.getHandler(task.Type)
@@ -164,7 +183,7 @@ func (w *Worker) processTask(workerID int, task *Task) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				errCh <- fmt.Errorf("panic: %v", r)
+				errCh <- fmt.Errorf("panic in handler: %v", r)
 			}
 		}()
 		errCh <- handler(task)
@@ -201,17 +220,19 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		}
 
 	case <-w.stopChan:
-		task.Status = TaskStatusPending
-		taskData, err := task.Marshal()
-		if err != nil {
-			log.Printf("Worker %d: failed to marshal task %s for requeue: %v", workerID, task.ID, err)
-			return
-		}
+		if task != nil && w.queue != nil {
+			task.Status = TaskStatusPending
+			taskData, err := task.Marshal()
+			if err != nil {
+				log.Printf("Worker %d: failed to marshal task %s for requeue: %v", workerID, task.ID, err)
+				return
+			}
 
-		if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
-			log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
-		} else {
-			log.Printf("Worker %d: returned task %s to queue due to shutdown", workerID, task.ID)
+			if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
+				log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
+			} else {
+				log.Printf("Worker %d: returned task %s to queue due to shutdown", workerID, task.ID)
+			}
 		}
 	}
 }
