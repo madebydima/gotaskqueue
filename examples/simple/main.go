@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/madebydima/gotaskqueue"
@@ -23,6 +24,14 @@ type ReportData struct {
 }
 
 func main() {
+	// Создаем статическую папку если её нет
+	if err := os.MkdirAll("static/css", 0755); err != nil {
+		log.Printf("Warning: could not create static/css directory: %v", err)
+	}
+	if err := os.MkdirAll("static/js", 0755); err != nil {
+		log.Printf("Warning: could not create static/js directory: %v", err)
+	}
+
 	// Создаем очередь
 	queue, err := gotaskqueue.New(
 		gotaskqueue.WithRedisAddr("localhost:6379"),
@@ -34,10 +43,11 @@ func main() {
 	}
 	defer queue.Close()
 
-	// Запускаем dashboard
+	// Запускаем улучшенный dashboard
 	queue.StartDashboard(":8080")
+	log.Println("📊 Dashboard available at: http://localhost:8080")
 
-	// Создаем воркера
+	// Создаем воркер
 	worker := queue.NewWorker(
 		gotaskqueue.WithConcurrency(2),
 		gotaskqueue.WithPollInterval(time.Second*2),
@@ -48,11 +58,11 @@ func main() {
 	worker.Handle("generate_report", generateReportHandler)
 	worker.Handle("cleanup", cleanupHandler)
 
-	// Запускаем воркера
+	// Запускаем воркер
 	go worker.Start()
 
 	// Добавляем задачи в очередь
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		emailData := EmailData{
 			To:      fmt.Sprintf("user%d@example.com", i),
 			Subject: fmt.Sprintf("Test Email %d", i),
@@ -84,7 +94,7 @@ func main() {
 	}
 
 	// Добавляем задачу с кастомными настройками повтора
-	cleanupData := map[string]interface{}{"reason": "nightly_cleanup"}
+	cleanupData := map[string]any{"reason": "nightly_cleanup"}
 	taskID, err := queue.EnqueueWithRetry("cleanup", cleanupData, 5)
 	if err != nil {
 		log.Printf("Failed to enqueue cleanup task: %v", err)
@@ -95,7 +105,7 @@ func main() {
 	// Ждем некоторое время для обработки задач
 	time.Sleep(time.Second * 30)
 
-	// Останавливаем воркера
+	// Останавливаем воркер
 	worker.Stop()
 
 	// Выводим финальную статистику
@@ -148,7 +158,7 @@ func generateReportHandler(task *gotaskqueue.Task) error {
 
 // cleanupHandler обработчик для очистки
 func cleanupHandler(task *gotaskqueue.Task) error {
-	var data map[string]interface{}
+	var data map[string]any
 	if err := task.UnmarshalData(&data); err != nil {
 		return err
 	}

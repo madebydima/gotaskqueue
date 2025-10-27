@@ -62,7 +62,7 @@ func WithTaskTypes(taskTypes ...string) WorkerOption {
 	}
 }
 
-// NewWorker создает нового воркера
+// NewWorker создает новый воркер
 func (q *Queue) NewWorker(options ...WorkerOption) *Worker {
 	config := DefaultWorkerConfig()
 	for _, option := range options {

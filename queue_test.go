@@ -25,7 +25,7 @@ func TestEnqueueAndProcess(t *testing.T) {
 	require.NoError(t, err)
 	defer queue.Close()
 
-	// Создаем воркера
+	// Создаем воркер
 	worker := queue.NewWorker(WithConcurrency(1))
 
 	processed := make(chan bool, 1)
