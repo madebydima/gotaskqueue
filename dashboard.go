@@ -12,14 +12,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Dashboard представляет улучшенный веб-интерфейс для мониторинга очереди
 type Dashboard struct {
 	queue    *Queue
 	addr     string
 	template *template.Template
 }
 
-// DashboardData содержит все данные для отображения в дашборде
 type DashboardData struct {
 	Stats     *QueueStats
 	Tasks     []*Task
@@ -27,7 +25,6 @@ type DashboardData struct {
 	Timestamp time.Time
 }
 
-// NewDashboard создает новый dashboard
 func (q *Queue) NewDashboard(addr string) *Dashboard {
 	// Парсим шаблоны при создании
 	tmpl := template.Must(template.New("dashboard").Funcs(template.FuncMap{
@@ -77,14 +74,11 @@ func (q *Queue) NewDashboard(addr string) *Dashboard {
 	}
 }
 
-// Start запускает веб-сервер dashboard
 func (d *Dashboard) Start() error {
 	r := mux.NewRouter()
 
-	// Статические файлы из embed
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", StaticHandler()))
 
-	// API endpoints
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/stats", d.handleStatsAPI)
 	api.HandleFunc("/tasks", d.handleTasksAPI)
@@ -93,7 +87,6 @@ func (d *Dashboard) Start() error {
 	api.HandleFunc("/health", d.handleHealthAPI)
 	api.HandleFunc("/config", d.handleConfigAPI)
 
-	// Web routes
 	r.HandleFunc("/", d.handleDashboard)
 	r.HandleFunc("/tasks", d.handleTasksPage)
 	r.HandleFunc("/task/{id}", d.handleTaskDetailPage)
@@ -102,7 +95,6 @@ func (d *Dashboard) Start() error {
 	return http.ListenAndServe(d.addr, r)
 }
 
-// handleDashboard отображает главную страницу dashboard
 func (d *Dashboard) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	stats, err := d.queue.GetStats()
 	if err != nil {
@@ -130,7 +122,6 @@ func (d *Dashboard) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleTasksPage отображает страницу со списком задач
 func (d *Dashboard) handleTasksPage(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	statusFilter := r.URL.Query().Get("status")
@@ -161,7 +152,6 @@ func (d *Dashboard) handleTasksPage(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now(),
 	}
 
-	// Используем тот же шаблон, но JavaScript покажет список задач
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := d.template.Execute(w, data); err != nil {
 		log.Printf("Template execution error: %v", err)
@@ -169,7 +159,6 @@ func (d *Dashboard) handleTasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleTaskDetailPage отображает детальную страницу задачи
 func (d *Dashboard) handleTaskDetailPage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
@@ -204,7 +193,6 @@ func (d *Dashboard) handleTaskDetailPage(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleStatsAPI возвращает статистику в формате JSON
 func (d *Dashboard) handleStatsAPI(w http.ResponseWriter, r *http.Request) {
 	stats, err := d.queue.GetStats()
 	if err != nil {
@@ -213,18 +201,16 @@ func (d *Dashboard) handleStatsAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"stats":     stats,
 		"timestamp": time.Now(),
 	})
 }
 
-// handleTasksAPI возвращает список задач с пагинацией и фильтрацией
 func (d *Dashboard) handleTasksAPI(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
 	statusFilter := r.URL.Query().Get("status")
-	// typeFilter := r.URL.Query().Get("type")
 
 	limit := 50
 	offset := 0
@@ -246,7 +232,6 @@ func (d *Dashboard) handleTasksAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Применяем пагинацию
 	if offset > len(tasks) {
 		offset = len(tasks)
 	}
@@ -256,7 +241,7 @@ func (d *Dashboard) handleTasksAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"tasks":     tasks[offset:end],
 		"total":     len(tasks),
 		"hasMore":   end < len(tasks),
@@ -264,7 +249,6 @@ func (d *Dashboard) handleTasksAPI(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTaskAPI возвращает информацию о конкретной задаче
 func (d *Dashboard) handleTaskAPI(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
@@ -283,7 +267,6 @@ func (d *Dashboard) handleTaskAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(task)
 }
 
-// handleTaskRetryAPI повторно запускает задачу
 func (d *Dashboard) handleTaskRetryAPI(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
@@ -298,7 +281,6 @@ func (d *Dashboard) handleTaskRetryAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Сбрасываем статус задачи и добавляем обратно в очередь
 	task.Status = TaskStatusPending
 	task.Retries = 0
 	task.Error = ""
@@ -309,35 +291,31 @@ func (d *Dashboard) handleTaskRetryAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Обновляем задачу в хранилище
 	if err := d.queue.client.HSet(d.queue.ctx, d.queue.key("tasks"), task.ID, taskData).Err(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Добавляем в очередь
 	if err := d.queue.client.LPush(d.queue.ctx, d.queue.key("queue", task.Type), taskData).Err(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"message": "Task queued for retry",
 		"taskId":  task.ID,
 	})
 }
 
-// handleHealthAPI возвращает статус здоровья системы
 func (d *Dashboard) handleHealthAPI(w http.ResponseWriter, r *http.Request) {
-	health := map[string]interface{}{
+	health := map[string]any{
 		"status":    "healthy",
 		"timestamp": time.Now(),
 		"version":   "1.0.0",
 	}
 
-	// Проверяем соединение с Redis
 	if err := d.queue.client.Ping(d.queue.ctx).Err(); err != nil {
 		health["status"] = "unhealthy"
 		health["error"] = err.Error()
@@ -347,13 +325,11 @@ func (d *Dashboard) handleHealthAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(health)
 }
 
-// handleConfigAPI возвращает конфигурацию очереди
 func (d *Dashboard) handleConfigAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(d.queue.options)
 }
 
-// getRecentTasks возвращает последние задачи
 func (d *Dashboard) getRecentTasks(limit int) ([]*Task, error) {
 	taskKeys, err := d.queue.client.HKeys(d.queue.ctx, d.queue.key("tasks")).Result()
 	if err != nil {
@@ -371,7 +347,6 @@ func (d *Dashboard) getRecentTasks(limit int) ([]*Task, error) {
 		}
 	}
 
-	// Сортируем по времени создания (новые первые)
 	for i, j := 0, len(tasks)-1; i < j; i, j = i+1, j-1 {
 		tasks[i], tasks[j] = tasks[j], tasks[i]
 	}
@@ -379,7 +354,6 @@ func (d *Dashboard) getRecentTasks(limit int) ([]*Task, error) {
 	return tasks, nil
 }
 
-// getFilteredTasks возвращает задачи с фильтрацией
 func (d *Dashboard) getFilteredTasks(limit int, statusFilter string) ([]*Task, error) {
 	taskKeys, err := d.queue.client.HKeys(d.queue.ctx, d.queue.key("tasks")).Result()
 	if err != nil {
@@ -393,7 +367,6 @@ func (d *Dashboard) getFilteredTasks(limit int, statusFilter string) ([]*Task, e
 			continue
 		}
 
-		// Применяем фильтр по статусу
 		if statusFilter != "" && string(task.Status) != statusFilter {
 			continue
 		}
@@ -401,12 +374,10 @@ func (d *Dashboard) getFilteredTasks(limit int, statusFilter string) ([]*Task, e
 		tasks = append(tasks, task)
 	}
 
-	// Сортируем по времени создания (новые первые)
 	for i, j := 0, len(tasks)-1; i < j; i, j = i+1, j-1 {
 		tasks[i], tasks[j] = tasks[j], tasks[i]
 	}
 
-	// Ограничиваем количество
 	if len(tasks) > limit {
 		tasks = tasks[:limit]
 	}
@@ -414,7 +385,6 @@ func (d *Dashboard) getFilteredTasks(limit int, statusFilter string) ([]*Task, e
 	return tasks, nil
 }
 
-// StartDashboard запускает dashboard для очереди
 func (q *Queue) StartDashboard(addr string) {
 	dashboard := q.NewDashboard(addr)
 	go func() {
@@ -437,7 +407,6 @@ const dashboardTemplate = `
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Header -->
         <div class="dashboard-header">
             <h1>Go TaskQueue Dashboard</h1>
             <p class="subtitle">Monitor and manage your task queue</p>
@@ -452,7 +421,6 @@ const dashboardTemplate = `
             </div>
         </div>
 
-        <!-- Navigation -->
         <div class="nav-tabs">
             <button class="nav-tab active" data-view="overview">
                 <i class="fas fa-chart-pie"></i> Overview
@@ -465,9 +433,7 @@ const dashboardTemplate = `
             </button>
         </div>
 
-        <!-- Overview View -->
         <div id="overviewView" class="view-section">
-            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card pending">
                     <div class="stat-label">Pending</div>
@@ -506,7 +472,6 @@ const dashboardTemplate = `
                 </div>
             </div>
 
-            <!-- Charts -->
             <div class="charts-container">
                 <div class="chart-card">
                     <h3>Task Distribution</h3>
@@ -522,7 +487,6 @@ const dashboardTemplate = `
                 </div>
             </div>
 
-            <!-- Recent Tasks -->
             <div class="tasks-section">
                 <div class="controls-row">
                     <h3>Recent Tasks</h3>
@@ -575,7 +539,6 @@ const dashboardTemplate = `
             </div>
         </div>
 
-        <!-- Tasks View -->
         <div id="tasksView" class="view-section" style="display: none;">
             <div class="tasks-section">
                 <div class="controls-row">
@@ -606,15 +569,12 @@ const dashboardTemplate = `
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="allTasksContainer">
-                            <!-- JavaScript will populate this -->
-                        </tbody>
+                        <tbody id="allTasksContainer"></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- Configuration View -->
         <div id="configurationView" class="view-section" style="display: none;">
             <div class="chart-card">
                 <h3>Queue Configuration</h3>

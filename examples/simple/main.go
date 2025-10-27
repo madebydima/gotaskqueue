@@ -9,14 +9,12 @@ import (
 	"github.com/madebydima/gotaskqueue"
 )
 
-// EmailData пример структуры данных для задачи
 type EmailData struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
 }
 
-// ReportData пример структуры для задачи генерации отчета
 type ReportData struct {
 	UserID    string    `json:"user_id"`
 	StartDate time.Time `json:"start_date"`
@@ -24,7 +22,6 @@ type ReportData struct {
 }
 
 func main() {
-	// Создаем статическую папку если её нет
 	if err := os.MkdirAll("static/css", 0755); err != nil {
 		log.Printf("Warning: could not create static/css directory: %v", err)
 	}
@@ -32,7 +29,6 @@ func main() {
 		log.Printf("Warning: could not create static/js directory: %v", err)
 	}
 
-	// Создаем очередь
 	queue, err := gotaskqueue.New(
 		gotaskqueue.WithRedisAddr("localhost:6379"),
 		gotaskqueue.WithNamespace("myapp"),
@@ -43,25 +39,20 @@ func main() {
 	}
 	defer queue.Close()
 
-	// Запускаем улучшенный dashboard
 	queue.StartDashboard(":8080")
 	log.Println("📊 Dashboard available at: http://localhost:8080")
 
-	// Создаем воркер
 	worker := queue.NewWorker(
 		gotaskqueue.WithConcurrency(2),
 		gotaskqueue.WithPollInterval(time.Second*2),
 	)
 
-	// Регистрируем обработчики
 	worker.Handle("send_email", sendEmailHandler)
 	worker.Handle("generate_report", generateReportHandler)
 	worker.Handle("cleanup", cleanupHandler)
 
-	// Запускаем воркер
 	go worker.Start()
 
-	// Добавляем задачи в очередь
 	for i := range 10 {
 		emailData := EmailData{
 			To:      fmt.Sprintf("user%d@example.com", i),
@@ -93,7 +84,6 @@ func main() {
 		}
 	}
 
-	// Добавляем задачу с кастомными настройками повтора
 	cleanupData := map[string]any{"reason": "nightly_cleanup"}
 	taskID, err := queue.EnqueueWithRetry("cleanup", cleanupData, 5)
 	if err != nil {
@@ -102,13 +92,10 @@ func main() {
 		log.Printf("Enqueued cleanup task with custom retry: %s", taskID)
 	}
 
-	// Ждем некоторое время для обработки задач
 	time.Sleep(time.Second * 30)
 
-	// Останавливаем воркер
 	worker.Stop()
 
-	// Выводим финальную статистику
 	stats, err := queue.GetStats()
 	if err != nil {
 		log.Printf("Failed to get stats: %v", err)
@@ -118,7 +105,6 @@ func main() {
 	}
 }
 
-// sendEmailHandler обработчик для отправки email
 func sendEmailHandler(task *gotaskqueue.Task) error {
 	var emailData EmailData
 	if err := task.UnmarshalData(&emailData); err != nil {
@@ -127,10 +113,8 @@ func sendEmailHandler(task *gotaskqueue.Task) error {
 
 	log.Printf("Sending email to: %s, Subject: %s", emailData.To, emailData.Subject)
 
-	// Имитируем работу
 	time.Sleep(time.Second * 2)
 
-	// Имитируем случайные ошибки для демонстрации retry
 	// if time.Now().Unix()%3 == 0 {
 	//     return fmt.Errorf("random email sending error")
 	// }
@@ -139,7 +123,6 @@ func sendEmailHandler(task *gotaskqueue.Task) error {
 	return nil
 }
 
-// generateReportHandler обработчик для генерации отчетов
 func generateReportHandler(task *gotaskqueue.Task) error {
 	var reportData ReportData
 	if err := task.UnmarshalData(&reportData); err != nil {
@@ -149,14 +132,12 @@ func generateReportHandler(task *gotaskqueue.Task) error {
 	log.Printf("Generating report for user: %s, Period: %s to %s",
 		reportData.UserID, reportData.StartDate.Format("2006-01-02"), reportData.EndDate.Format("2006-01-02"))
 
-	// Имитируем длительную обработку
 	time.Sleep(time.Second * 3)
 
 	log.Printf("Report generated for user: %s", reportData.UserID)
 	return nil
 }
 
-// cleanupHandler обработчик для очистки
 func cleanupHandler(task *gotaskqueue.Task) error {
 	var data map[string]any
 	if err := task.UnmarshalData(&data); err != nil {

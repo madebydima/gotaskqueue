@@ -1,52 +1,46 @@
-.PHONY: test build run clean lint coverage
+.PHONY: test test-unit test-integration test-coverage bench lint
 
-# Установка зависимостей
-deps:
-	go mod download
-	go mod tidy
-
-# Запуск тестов
 test:
 	go test -v ./...
 
-# Запуск тестов с покрытием
+test-unit:
+	go test -v -run="^Test(New|Task|Queue|Worker|Backoff)" ./...
+
+test-integration:
+	go test -v -run="^TestIntegration" ./...
+
 test-coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
-# Сборка проекта
-build:
-	go build ./...
+bench:
+	go test -bench=. -benchmem ./...
 
-# Запуск линтера
 lint:
-	# Установите golangci-lint если нет: https://golangci-lint.run/usage/install/
 	golangci-lint run
 
-# Запуск примера
-run-example:
-	cd examples/simple && go run main.go
-
-# Очистка
-clean:
-	go clean
-	rm -f coverage.out coverage.html
-
-# Запуск Redis в Docker (для тестов)
 run-redis:
 	docker run -d -p 6379:6379 --name test-redis redis:7-alpine
 
-# Остановка Redis
 stop-redis:
 	docker stop test-redis
 	docker rm test-redis
 
+test-setup: run-redis
+	sleep 2
+
+clean:
+	go clean
+	rm -f coverage.out coverage.html
+
 # Помощь
 help:
 	@echo "Доступные команды:"
-	@echo "  make deps         - Установка зависимостей"
-	@echo "  make test         - Запуск тестов"
+	@echo "  make test-setup    - Подготовка тестового окружения"
+	@echo "  make test          - Запуск всех тестов"
+	@echo "  make test-unit     - Запуск unit тестов"
+	@echo "  make test-integration - Запуск интеграционных тестов"
 	@echo "  make test-coverage - Тесты с покрытием кода"
-	@echo "  make lint         - Проверка кодстайла"
-	@echo "  make run-example  - Запуск примера"
-	@echo "  make run-redis    - Запуск Redis для тестов"
+	@echo "  make bench         - Бенчмарки"
+	@echo "  make lint          - Проверка кодстайла"

@@ -8,10 +8,8 @@ import (
 	"time"
 )
 
-// Handler функция для обработки задач
 type Handler func(*Task) error
 
-// Worker представляет воркер для обработки задач
 type Worker struct {
 	queue    *Queue
 	handlers map[string]Handler
@@ -22,14 +20,12 @@ type Worker struct {
 	config   *WorkerConfig
 }
 
-// WorkerConfig содержит настройки воркера
 type WorkerConfig struct {
 	Concurrency  int
 	PollInterval time.Duration
 	TaskTypes    []string
 }
 
-// DefaultWorkerConfig возвращает настройки воркера по умолчанию
 func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
 		Concurrency:  1,
@@ -38,31 +34,26 @@ func DefaultWorkerConfig() *WorkerConfig {
 	}
 }
 
-// WorkerOption функция для настройки воркера
 type WorkerOption func(*WorkerConfig)
 
-// WithConcurrency устанавливает количество concurrent воркеров
 func WithConcurrency(concurrency int) WorkerOption {
 	return func(c *WorkerConfig) {
 		c.Concurrency = concurrency
 	}
 }
 
-// WithPollInterval устанавливает интервал опроса очереди
 func WithPollInterval(interval time.Duration) WorkerOption {
 	return func(c *WorkerConfig) {
 		c.PollInterval = interval
 	}
 }
 
-// WithTaskTypes устанавливает типы задач для обработки
 func WithTaskTypes(taskTypes ...string) WorkerOption {
 	return func(c *WorkerConfig) {
 		c.TaskTypes = taskTypes
 	}
 }
 
-// NewWorker создает новый воркер
 func (q *Queue) NewWorker(options ...WorkerOption) *Worker {
 	config := DefaultWorkerConfig()
 	for _, option := range options {
@@ -78,14 +69,12 @@ func (q *Queue) NewWorker(options ...WorkerOption) *Worker {
 	}
 }
 
-// Handle регистрирует обработчик для типа задачи
 func (w *Worker) Handle(taskType string, handler Handler) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.handlers[taskType] = handler
 }
 
-// getHandler возвращает обработчик для типа задачи
 func (w *Worker) getHandler(taskType string) (Handler, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -93,7 +82,6 @@ func (w *Worker) getHandler(taskType string) (Handler, bool) {
 	return handler, exists
 }
 
-// Start запускает воркер
 func (w *Worker) Start() {
 	if w.stopped {
 		return
@@ -107,13 +95,11 @@ func (w *Worker) Start() {
 	}
 }
 
-// work основной цикл работы воркера
 func (w *Worker) work(workerID int) {
 	defer w.wg.Done()
 
 	log.Printf("Worker %d started", workerID)
 
-	// Обработка паники в горутине
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Worker %d panic recovered: %v", workerID, r)
@@ -128,7 +114,6 @@ func (w *Worker) work(workerID int) {
 		default:
 			if err := w.processTasks(workerID); err != nil {
 				log.Printf("Worker %d error processing tasks: %v", workerID, err)
-				// Пауза при ошибках
 				time.Sleep(time.Second * 5)
 			}
 			time.Sleep(w.config.PollInterval)
@@ -136,7 +121,6 @@ func (w *Worker) work(workerID int) {
 	}
 }
 
-// processTasks обрабатывает задачи из очереди
 func (w *Worker) processTasks(workerID int) error {
 	taskTypes := w.getTaskTypes()
 
@@ -151,7 +135,7 @@ func (w *Worker) processTasks(workerID int) error {
 		}
 
 		if task == nil {
-			continue // Нет задач в очереди
+			continue
 		}
 
 		w.processTask(workerID, task)
@@ -160,7 +144,6 @@ func (w *Worker) processTasks(workerID int) error {
 	return nil
 }
 
-// processTask обрабатывает одну задачу
 func (w *Worker) processTask(workerID int, task *Task) {
 	log.Printf("Worker %d: processing task %s of type %s", workerID, task.ID, task.Type)
 
@@ -173,7 +156,6 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		return
 	}
 
-	// Выполняем обработку с таймаутом
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
@@ -219,7 +201,6 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		}
 
 	case <-w.stopChan:
-		// Воркер останавливается, возвращаем задачу в очередь
 		task.Status = TaskStatusPending
 		taskData, err := task.Marshal()
 		if err != nil {
@@ -227,7 +208,6 @@ func (w *Worker) processTask(workerID int, task *Task) {
 			return
 		}
 
-		// Кладем задачу обратно в очередь
 		if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
 			log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
 		} else {
@@ -236,13 +216,11 @@ func (w *Worker) processTask(workerID int, task *Task) {
 	}
 }
 
-// getTaskTypes возвращает типы задач для обработки
 func (w *Worker) getTaskTypes() []string {
 	if len(w.config.TaskTypes) > 0 {
 		return w.config.TaskTypes
 	}
 
-	// Если типы не указаны, возвращаем все зарегистрированные типы
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -254,7 +232,6 @@ func (w *Worker) getTaskTypes() []string {
 	return taskTypes
 }
 
-// Stop останавливает воркер
 func (w *Worker) Stop() {
 	if w.stopped {
 		return
@@ -267,7 +244,6 @@ func (w *Worker) Stop() {
 	log.Println("Worker stopped")
 }
 
-// IsRunning проверяет, работает ли воркер
 func (w *Worker) IsRunning() bool {
 	return !w.stopped
 }

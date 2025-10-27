@@ -17,7 +17,6 @@ class TaskQueueDashboard {
     }
 
     setupEventListeners() {
-        // Auto-refresh toggle
         document.getElementById('autoRefreshToggle')?.addEventListener('change', (e) => {
             this.autoRefresh = e.target.checked;
             if (this.autoRefresh) {
@@ -27,14 +26,12 @@ class TaskQueueDashboard {
             }
         });
 
-        // Navigation
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 this.switchView(e.target.dataset.view);
             });
         });
 
-        // Task actions
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('retry-task') || 
                 e.target.parentElement.classList.contains('retry-task')) {
@@ -43,7 +40,6 @@ class TaskQueueDashboard {
             }
         });
 
-        // Search and filter
         const taskSearch = document.getElementById('taskSearch');
         const statusFilter = document.getElementById('statusFilter');
 
@@ -85,17 +81,14 @@ class TaskQueueDashboard {
     updateStatsDisplay() {
         if (!this.stats) return;
 
-        // Update stat cards
         this.updateStatCard('pending', this.stats.pending);
         this.updateStatCard('processing', this.stats.processing);
         this.updateStatCard('completed', this.stats.completed);
         this.updateStatCard('failed', this.stats.failed);
         this.updateStatCard('total', this.stats.total);
 
-        // Update progress bars
         this.updateProgressBars();
 
-        // Update timestamp
         document.getElementById('lastUpdated').textContent = 
             new Date().toLocaleTimeString();
     }
@@ -169,7 +162,6 @@ class TaskQueueDashboard {
     }
 
     initCharts() {
-        // Main statistics chart
         const statsCtx = document.getElementById('statsChart');
         if (statsCtx) {
             this.charts.stats = new Chart(statsCtx, {
@@ -202,7 +194,6 @@ class TaskQueueDashboard {
             });
         }
 
-        // Timeline chart
         const timelineCtx = document.getElementById('timelineChart');
         if (timelineCtx) {
             this.charts.timeline = new Chart(timelineCtx, {
@@ -249,7 +240,6 @@ class TaskQueueDashboard {
     updateCharts() {
         if (!this.stats || !this.charts.stats) return;
 
-        // Update main chart
         this.charts.stats.data.datasets[0].data = [
             this.stats.pending,
             this.stats.processing,
@@ -258,7 +248,6 @@ class TaskQueueDashboard {
         ];
         this.charts.stats.update();
 
-        // Update timeline
         if (this.charts.timeline) {
             const now = new Date();
             const labels = Array.from({length: 6}, (_, i) => {
@@ -311,17 +300,14 @@ class TaskQueueDashboard {
     switchView(view) {
         this.currentView = view;
         
-        // Update active tab
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.view === view);
         });
 
-        // Show/hide sections
         document.querySelectorAll('.view-section').forEach(section => {
             section.style.display = section.id === `${view}View` ? 'block' : 'none';
         });
 
-        // Load specific data if needed
         if (view === 'tasks') {
             this.loadTasks();
         }
@@ -363,14 +349,12 @@ class TaskQueueDashboard {
 
         document.body.appendChild(notification);
 
-        // Auto-remove after 3 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
             }
         }, 3000);
 
-        // Close button
         notification.querySelector('.notification-close').addEventListener('click', () => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
@@ -379,7 +363,6 @@ class TaskQueueDashboard {
     }
 }
 
-// Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new TaskQueueDashboard();
 });
