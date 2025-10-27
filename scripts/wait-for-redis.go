@@ -19,7 +19,7 @@ func main() {
 
 	fmt.Println("Waiting for Redis to be ready...")
 
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		err := client.Ping(ctx).Err()
 		if err == nil {
 			fmt.Println("Redis is ready!")

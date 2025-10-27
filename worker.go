@@ -220,19 +220,25 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		}
 
 	case <-w.stopChan:
-		if task != nil && w.queue != nil {
-			task.Status = TaskStatusPending
-			taskData, err := task.Marshal()
-			if err != nil {
-				log.Printf("Worker %d: failed to marshal task %s for requeue: %v", workerID, task.ID, err)
-				return
-			}
+		log.Printf("Worker %d: received stop signal, returning task %s to queue", workerID, task.ID)
 
-			if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
-				log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
-			} else {
-				log.Printf("Worker %d: returned task %s to queue due to shutdown", workerID, task.ID)
-			}
+		task.Status = TaskStatusPending
+		task.ProcessedAt = nil
+
+		taskData, err := task.Marshal()
+		if err != nil {
+			log.Printf("Worker %d: failed to marshal task %s for requeue: %v", workerID, task.ID, err)
+			return
+		}
+
+		if err := w.queue.client.HSet(w.queue.ctx, w.queue.key("tasks"), task.ID, taskData).Err(); err != nil {
+			log.Printf("Worker %d: failed to update task %s in storage: %v", workerID, task.ID, err)
+		}
+
+		if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
+			log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
+		} else {
+			log.Printf("Worker %d: returned task %s to queue due to shutdown", workerID, task.ID)
 		}
 	}
 }
