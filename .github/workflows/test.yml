@@ -14,11 +14,6 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
     - name: Checkout code
@@ -28,16 +23,14 @@ jobs:
       uses: actions/setup-go@v3
       with:
         go-version: '1.21'
-        cache: false
         
     - name: Install dependencies
       run: |
         go mod download
         go mod verify
         
-    - name: Wait for Redis
-      run: |
-        timeout 30s bash -c 'until redis-cli -h localhost ping; do sleep 1; done' || exit 1
+    - name: Wait for Redis using Go
+      run: go run scripts/wait-for-redis.go
         
     - name: Run unit tests
       run: go test -v -timeout=30s -run="^Test(New|Task|Queue|Worker|Backoff)" ./...

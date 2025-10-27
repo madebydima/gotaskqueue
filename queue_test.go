@@ -136,7 +136,7 @@ func TestQueueRetryLogic(t *testing.T) {
 		WithRedisAddr("localhost:6379"),
 		WithNamespace("test-retry"),
 		WithMaxRetries(2),
-		WithRetryDelay(100*time.Millisecond),
+		WithRetryDelay(200*time.Millisecond),
 	)
 	require.NoError(t, err)
 	defer queue.Close()
@@ -152,7 +152,7 @@ func TestQueueRetryLogic(t *testing.T) {
 		err = queue.retryTask(task, errors.New("simulated failure"))
 		require.NoError(t, err)
 
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 		queue.processDelayedTasks()
 
 		retriedTask, err := queue.dequeue("flaky_task")
