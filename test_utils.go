@@ -8,12 +8,14 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// TestRedisClient создает тестового Redis клиента
 func TestRedisClient(t *testing.T) *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
-		DB:   1,
+		DB:   1, // Используем базу 1 для тестов
 	})
 
+	// Проверяем подключение
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -21,6 +23,7 @@ func TestRedisClient(t *testing.T) *redis.Client {
 		t.Fatalf("Failed to connect to test Redis: %v", err)
 	}
 
+	// Очищаем базу перед тестом
 	if err := client.FlushDB(ctx).Err(); err != nil {
 		t.Fatalf("Failed to flush test Redis: %v", err)
 	}
@@ -33,6 +36,7 @@ func TestRedisClient(t *testing.T) *redis.Client {
 	return client
 }
 
+// WaitForCondition ждет пока условие не станет true или не истечет таймаут
 func WaitForCondition(t *testing.T, condition func() bool, timeout time.Duration, checkInterval time.Duration) bool {
 	t.Helper()
 
@@ -54,6 +58,7 @@ func WaitForCondition(t *testing.T, condition func() bool, timeout time.Duration
 	}
 }
 
+// CreateTestQueue создает тестовую очередь
 func CreateTestQueue(t *testing.T, options ...Option) *Queue {
 	t.Helper()
 
@@ -76,6 +81,7 @@ func CreateTestQueue(t *testing.T, options ...Option) *Queue {
 	return queue
 }
 
+// CreateTestWorker создает тестового воркера
 func CreateTestWorker(t *testing.T, queue *Queue, options ...WorkerOption) *Worker {
 	t.Helper()
 

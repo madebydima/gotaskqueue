@@ -19,7 +19,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, 3, opts.MaxRetries)
 	assert.Equal(t, 5*time.Second, opts.RetryDelay)
 	assert.NotNil(t, opts.Backoff)
-	assert.Equal(t, 24*7*time.Hour, opts.TaskTTL)
+	assert.Equal(t, 24*7*time.Hour, opts.TaskTTL) // 1 week
 	assert.Equal(t, 10000, opts.MaxMemoryTasks)
 }
 
@@ -81,7 +81,7 @@ func TestBackoffOptions(t *testing.T) {
 
 		assert.IsType(t, ConstantBackoff{}, opts.Backoff)
 		assert.Equal(t, time.Second*10, opts.Backoff.NextDelay(0))
-		assert.Equal(t, time.Second*10, opts.Backoff.NextDelay(5))
+		assert.Equal(t, time.Second*10, opts.Backoff.NextDelay(5)) // Always the same
 	})
 
 	t.Run("WithExponentialBackoff", func(t *testing.T) {
@@ -109,7 +109,8 @@ func TestBackoffOptions(t *testing.T) {
 
 		assert.IsType(t, JitterBackoff{}, opts.Backoff)
 
-		for i := range 10 {
+		// Test multiple calls to ensure it stays within bounds
+		for i := 0; i < 10; i++ {
 			delay := opts.Backoff.NextDelay(i)
 			assert.True(t, delay >= time.Second && delay <= 5*time.Second,
 				"Delay %v should be between 1s and 5s", delay)
@@ -126,9 +127,9 @@ func TestBackoffOptions(t *testing.T) {
 		WithBackoffStrategy(backoff)(opts)
 
 		assert.IsType(t, CompositeBackoff{}, opts.Backoff)
-		assert.Equal(t, time.Second, opts.Backoff.NextDelay(0))
-		assert.Equal(t, 2*time.Second, opts.Backoff.NextDelay(1))
-		assert.Equal(t, time.Second, opts.Backoff.NextDelay(2))
+		assert.Equal(t, time.Second, opts.Backoff.NextDelay(0))   // First strategy
+		assert.Equal(t, 2*time.Second, opts.Backoff.NextDelay(1)) // Second strategy
+		assert.Equal(t, time.Second, opts.Backoff.NextDelay(2))   // First strategy again
 	})
 }
 
@@ -164,6 +165,7 @@ func TestWorkerOptions(t *testing.T) {
 func TestOptionChaining(t *testing.T) {
 	opts := DefaultOptions()
 
+	// Apply multiple options
 	WithRedisAddr("custom.redis:6379")(opts)
 	WithNamespace("test-app")(opts)
 	WithMaxRetries(5)(opts)

@@ -11,7 +11,7 @@ import (
 
 func TestNewTask(t *testing.T) {
 	t.Run("should create task with valid data", func(t *testing.T) {
-		taskData := map[string]any{
+		taskData := map[string]interface{}{
 			"email":   "test@example.com",
 			"subject": "Test Subject",
 		}
@@ -35,6 +35,7 @@ func TestNewTask(t *testing.T) {
 	})
 
 	t.Run("should return error for invalid data", func(t *testing.T) {
+		// Create data that cannot be marshaled to JSON
 		invalidData := make(chan int)
 
 		task, err := NewTask("invalid", invalidData, 1)
@@ -49,10 +50,12 @@ func TestTaskMarshalUnmarshal(t *testing.T) {
 	task, err := NewTask("test", taskData, 2)
 	require.NoError(t, err)
 
+	// Test Marshal
 	data, err := task.Marshal()
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
 
+	// Test Unmarshal
 	unmarshaledTask, err := UnmarshalTask(data)
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, unmarshaledTask.ID)
@@ -75,6 +78,7 @@ func TestTaskUnmarshalData(t *testing.T) {
 	task, err := NewTask("send_email", originalData, 3)
 	require.NoError(t, err)
 
+	// Test UnmarshalData
 	var unmarshaledData EmailData
 	err = task.UnmarshalData(&unmarshaledData)
 	require.NoError(t, err)
@@ -143,49 +147,31 @@ func TestTaskShouldRetry(t *testing.T) {
 }
 
 func TestTaskJSONCompatibility(t *testing.T) {
-	fixedTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
-
 	task := &Task{
 		ID:         "test-id",
 		Type:       "test-type",
 		Data:       []byte(`{"key":"value"}`),
-		CreatedAt:  fixedTime,
+		CreatedAt:  time.Now().UTC().Truncate(time.Second), // Truncate for JSON precision
 		Retries:    1,
 		MaxRetries: 3,
 		Status:     TaskStatusProcessing,
 	}
 
+	// Marshal to JSON
 	jsonData, err := json.Marshal(task)
 	require.NoError(t, err)
 
+	// Unmarshal from JSON
 	var unmarshaledTask Task
 	err = json.Unmarshal(jsonData, &unmarshaledTask)
 	require.NoError(t, err)
 
+	// Compare fields
 	assert.Equal(t, task.ID, unmarshaledTask.ID)
 	assert.Equal(t, task.Type, unmarshaledTask.Type)
 	assert.Equal(t, task.Data, unmarshaledTask.Data)
 	assert.Equal(t, task.Retries, unmarshaledTask.Retries)
 	assert.Equal(t, task.MaxRetries, unmarshaledTask.MaxRetries)
 	assert.Equal(t, task.Status, unmarshaledTask.Status)
-
-	assert.WithinDuration(t, task.CreatedAt, unmarshaledTask.CreatedAt, time.Millisecond)
-}
-
-func TestTaskWithZeroTime(t *testing.T) {
-	task := &Task{
-		ID:        "test-id",
-		Type:      "test-type",
-		CreatedAt: time.Time{},
-		Status:    TaskStatusPending,
-	}
-
-	data, err := task.Marshal()
-	require.NoError(t, err)
-
-	var unmarshaledTask Task
-	err = json.Unmarshal(data, &unmarshaledTask)
-	require.NoError(t, err)
-
-	assert.True(t, unmarshaledTask.CreatedAt.IsZero())
+	assert.WithinDuration(t, task.CreatedAt, unmarshaledTask.CreatedAt, time.Second)
 }

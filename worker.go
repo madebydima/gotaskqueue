@@ -144,10 +144,13 @@ func (w *Worker) processTasks(workerID int) error {
 	return nil
 }
 
+// processTask обрабатывает одну задачу
 func (w *Worker) processTask(workerID int, task *Task) {
+	// Добавляем защиту от паники
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Worker %d: panic recovered in processTask: %v", workerID, r)
+			// Пытаемся пометить задачу как неудачную
 			if task != nil && w.queue != nil {
 				w.queue.failTask(task, fmt.Errorf("panic: %v", r))
 			}
@@ -175,6 +178,7 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		return
 	}
 
+	// Выполняем обработку с таймаутом
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
@@ -220,8 +224,10 @@ func (w *Worker) processTask(workerID int, task *Task) {
 		}
 
 	case <-w.stopChan:
+		// Воркер останавливается, возвращаем задачу в очередь
 		log.Printf("Worker %d: received stop signal, returning task %s to queue", workerID, task.ID)
 
+		// Сбрасываем статус задачи
 		task.Status = TaskStatusPending
 		task.ProcessedAt = nil
 
@@ -231,10 +237,12 @@ func (w *Worker) processTask(workerID int, task *Task) {
 			return
 		}
 
+		// Обновляем задачу в основном хранилище
 		if err := w.queue.client.HSet(w.queue.ctx, w.queue.key("tasks"), task.ID, taskData).Err(); err != nil {
 			log.Printf("Worker %d: failed to update task %s in storage: %v", workerID, task.ID, err)
 		}
 
+		// Кладем задачу обратно в очередь
 		if err := w.queue.client.LPush(w.queue.ctx, w.queue.key("queue", task.Type), taskData).Err(); err != nil {
 			log.Printf("Worker %d: failed to requeue task %s: %v", workerID, task.ID, err)
 		} else {

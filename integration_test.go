@@ -24,6 +24,7 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		WithPollInterval(50*time.Millisecond),
 	)
 
+	// Test data
 	type EmailData struct {
 		To      string `json:"to"`
 		Subject string `json:"subject"`
@@ -32,6 +33,7 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 	var processedTasks sync.Map
 	var mu sync.Mutex
 
+	// Register handlers
 	worker.Handle("send_email", func(task *Task) error {
 		var data EmailData
 		task.UnmarshalData(&data)
@@ -48,11 +50,12 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		task.UnmarshalData(&attempt)
 
 		if attempt < 2 {
-			return assert.AnError
+			return assert.AnError // Fail first two attempts
 		}
 		return nil
 	})
 
+	// Start worker
 	go worker.Start()
 	defer worker.Stop()
 
@@ -65,11 +68,13 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		taskID, err := queue.Enqueue("send_email", emailData)
 		require.NoError(t, err)
 
+		// Wait for task to be processed
 		assert.Eventually(t, func() bool {
 			task, err := queue.GetTask(taskID)
 			return err == nil && task.Status == TaskStatusCompleted
-		}, 5*time.Second, 200*time.Millisecond)
+		}, 5*time.Second, 200*time.Millisecond) // Увеличиваем таймаут
 
+		// Verify task data was processed correctly
 		val, ok := processedTasks.Load(taskID)
 		assert.True(t, ok)
 		assert.Equal(t, emailData, val)
@@ -79,20 +84,39 @@ func TestIntegration_CompleteWorkflow(t *testing.T) {
 		taskID, err := queue.EnqueueWithRetry("flaky_operation", 1, 3)
 		require.NoError(t, err)
 
+		// Wait for task to eventually succeed
 		assert.Eventually(t, func() bool {
 			task, err := queue.GetTask(taskID)
 			return err == nil && task.Status == TaskStatusCompleted
-		}, 5*time.Second, 200*time.Millisecond)
+		}, 5*time.Second, 200*time.Millisecond) // Увеличиваем таймаут
 
+		// Verify it took multiple attempts
 		task, err := queue.GetTask(taskID)
 		require.NoError(t, err)
-		assert.Equal(t, 2, task.Retries)
+		assert.Equal(t, 2, task.Retries) // Failed twice, succeeded on third
+	})
+
+	t.Run("should handle retries correctly", func(t *testing.T) {
+		taskID, err := queue.EnqueueWithRetry("flaky_operation", 1, 3)
+		require.NoError(t, err)
+
+		// Wait for task to eventually succeed
+		assert.Eventually(t, func() bool {
+			task, err := queue.GetTask(taskID)
+			return err == nil && task.Status == TaskStatusCompleted
+		}, 2*time.Second, 100*time.Millisecond)
+
+		// Verify it took multiple attempts
+		task, err := queue.GetTask(taskID)
+		require.NoError(t, err)
+		assert.Equal(t, 2, task.Retries) // Failed twice, succeeded on third
 	})
 
 	t.Run("should handle multiple task types", func(t *testing.T) {
 		task1ID, _ := queue.Enqueue("send_email", EmailData{To: "test1@example.com"})
 		task2ID, _ := queue.Enqueue("send_email", EmailData{To: "test2@example.com"})
 
+		// Wait for both tasks to complete
 		assert.Eventually(t, func() bool {
 			task1, _ := queue.GetTask(task1ID)
 			task2, _ := queue.GetTask(task2ID)
@@ -123,18 +147,21 @@ func TestIntegration_DelayedTasks(t *testing.T) {
 
 	t.Run("should process delayed tasks after specified time", func(t *testing.T) {
 		start := time.Now()
-		delay := 200 * time.Millisecond
+		delay := 200 * time.Millisecond // Увеличиваем задержку
 
 		_, err := queue.EnqueueDelayed("delayed_task", "data", delay)
 		require.NoError(t, err)
 
+		// Task should not be processed immediately
 		time.Sleep(100 * time.Millisecond)
 		assert.True(t, processedAt.IsZero(), "Task should not be processed yet")
 
+		// Wait for task to be processed
 		assert.Eventually(t, func() bool {
 			return !processedAt.IsZero()
-		}, 3*time.Second, 100*time.Millisecond)
+		}, 3*time.Second, 100*time.Millisecond) // Увеличиваем таймаут
 
+		// Verify it was processed after the delay
 		actualDelay := processedAt.Sub(start)
 		assert.True(t, actualDelay >= delay,
 			"Task was processed after %v, expected at least %v", actualDelay, delay)
@@ -170,6 +197,7 @@ func TestIntegration_WorkerScaling(t *testing.T) {
 		}
 		processing.Unlock()
 
+		// Simulate work
 		time.Sleep(50 * time.Millisecond)
 
 		processing.Lock()
@@ -180,20 +208,24 @@ func TestIntegration_WorkerScaling(t *testing.T) {
 		return nil
 	})
 
-	for i := range numTasks {
+	// Enqueue tasks
+	for i := 0; i < numTasks; i++ {
 		_, err := queue.Enqueue("concurrent_task", i)
 		require.NoError(t, err)
 	}
 
+	// Start worker
 	go worker.Start()
 	defer worker.Stop()
 
+	// Wait for all tasks to complete
 	assert.Eventually(t, func() bool {
 		processing.Lock()
 		defer processing.Unlock()
 		return completed == numTasks
 	}, 5*time.Second, 100*time.Millisecond)
 
+	// Verify we achieved some level of concurrency
 	assert.True(t, maxConcurrent > 1,
 		"Should have processed tasks concurrently, max was %d", maxConcurrent)
 	assert.True(t, maxConcurrent <= numWorkers,

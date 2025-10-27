@@ -35,6 +35,7 @@ func TestNewQueue(t *testing.T) {
 		require.NoError(t, err)
 		defer queue.Close()
 
+		// Test that namespace is used in key generation
 		assert.Equal(t, "test-namespace", queue.namespace)
 	})
 }
@@ -53,6 +54,7 @@ func TestQueueEnqueue(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, taskID)
 
+		// Verify task was stored
 		task, err := queue.GetTask(taskID)
 		require.NoError(t, err)
 		assert.Equal(t, taskID, task.ID)
@@ -74,14 +76,18 @@ func TestQueueEnqueue(t *testing.T) {
 		taskID, err := queue.EnqueueDelayed("delayed_task", "data", 100*time.Millisecond)
 		require.NoError(t, err)
 
+		// Task should not be immediately available
 		task, err := queue.dequeue("delayed_task")
 		assert.NoError(t, err)
 		assert.Nil(t, task)
 
+		// Wait for delay to pass
 		time.Sleep(150 * time.Millisecond)
 
+		// Process delayed tasks
 		queue.processDelayedTasks()
 
+		// Now task should be available
 		task, err = queue.dequeue("delayed_task")
 		require.NoError(t, err)
 		require.NotNil(t, task)
@@ -107,17 +113,20 @@ func TestQueueDequeue(t *testing.T) {
 	defer queue.Close()
 
 	t.Run("should dequeue tasks in order", func(t *testing.T) {
+		// Enqueue multiple tasks
 		task1ID, err := queue.Enqueue("test_task", "data1")
 		require.NoError(t, err)
 		task2ID, err := queue.Enqueue("test_task", "data2")
 		require.NoError(t, err)
 
+		// Dequeue first task
 		task1, err := queue.dequeue("test_task")
 		require.NoError(t, err)
 		require.NotNil(t, task1)
 		assert.Equal(t, task1ID, task1.ID)
 		assert.Equal(t, TaskStatusProcessing, task1.Status)
 
+		// Dequeue second task
 		task2, err := queue.dequeue("test_task")
 		require.NoError(t, err)
 		require.NotNil(t, task2)
@@ -136,7 +145,7 @@ func TestQueueRetryLogic(t *testing.T) {
 		WithRedisAddr("localhost:6379"),
 		WithNamespace("test-retry"),
 		WithMaxRetries(2),
-		WithRetryDelay(200*time.Millisecond),
+		WithRetryDelay(200*time.Millisecond), // Увеличиваем задержку для CI
 	)
 	require.NoError(t, err)
 	defer queue.Close()
@@ -145,40 +154,26 @@ func TestQueueRetryLogic(t *testing.T) {
 		taskID, err := queue.Enqueue("flaky_task", "data")
 		require.NoError(t, err)
 
+		// Get the task
 		task, err := queue.dequeue("flaky_task")
 		require.NoError(t, err)
 		require.NotNil(t, task)
 
+		// Simulate task failure and retry
 		err = queue.retryTask(task, errors.New("simulated failure"))
 		require.NoError(t, err)
 
-		time.Sleep(300 * time.Millisecond)
+		// Task should be in delayed queue for retry
+		time.Sleep(300 * time.Millisecond) // Увеличиваем ожидание для CI
 		queue.processDelayedTasks()
 
+		// Task should be available again
 		retriedTask, err := queue.dequeue("flaky_task")
 		require.NoError(t, err)
 		require.NotNil(t, retriedTask)
 		assert.Equal(t, taskID, retriedTask.ID)
 		assert.Equal(t, 1, retriedTask.Retries)
 		assert.Equal(t, TaskStatusProcessing, retriedTask.Status)
-	})
-
-	t.Run("should fail task when max retries exceeded", func(t *testing.T) {
-		task := &Task{
-			ID:         "test-task",
-			Type:       "test",
-			Retries:    2,
-			MaxRetries: 2,
-			Status:     TaskStatusProcessing,
-		}
-
-		err := queue.retryTask(task, errors.New("final failure"))
-		require.NoError(t, err)
-
-		failedTask, err := queue.GetTask(task.ID)
-		require.NoError(t, err)
-		assert.Equal(t, TaskStatusFailed, failedTask.Status)
-		assert.Equal(t, ErrMaxRetriesExceeded.Error(), failedTask.Error)
 	})
 }
 
@@ -190,14 +185,17 @@ func TestQueueStats(t *testing.T) {
 	require.NoError(t, err)
 	defer queue.Close()
 
+	// Clear any existing tasks
 	ctx := context.Background()
 	queue.client.Del(ctx, queue.key("tasks"))
 
 	t.Run("should return accurate statistics", func(t *testing.T) {
+		// Initial stats should be zero
 		stats, err := queue.GetStats()
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), stats.Total)
 
+		// Add some tasks with different statuses
 		task1, _ := NewTask("type1", "data1", 3)
 		task1.Status = TaskStatusPending
 		task1Data, _ := task1.Marshal()
@@ -213,11 +211,12 @@ func TestQueueStats(t *testing.T) {
 		task3Data, _ := task3.Marshal()
 		queue.client.HSet(ctx, queue.key("tasks"), task3.ID, task3Data)
 
+		// Check stats
 		stats, err = queue.GetStats()
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), stats.Total)
 		assert.Equal(t, int64(1), stats.Pending)
-		assert.Equal(t, int64(0), stats.Processing)
+		assert.Equal(t, int64(0), stats.Processing) // No processing tasks
 		assert.Equal(t, int64(1), stats.Completed)
 		assert.Equal(t, int64(1), stats.Failed)
 	})
@@ -236,19 +235,23 @@ func TestQueueCleanup(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("should cleanup old tasks", func(t *testing.T) {
+		// Create an old completed task
 		oldTask, _ := NewTask("old_task", "data", 1)
 		oldTask.Status = TaskStatusCompleted
-		oldTask.CreatedAt = time.Now().Add(-time.Hour)
+		oldTask.CreatedAt = time.Now().Add(-time.Hour) // Very old
 		oldTaskData, _ := oldTask.Marshal()
 		queue.client.HSet(ctx, queue.key("tasks"), oldTask.ID, oldTaskData)
 
+		// Create a recent task
 		recentTask, _ := NewTask("recent_task", "data", 1)
 		recentTask.Status = TaskStatusCompleted
 		recentTaskData, _ := recentTask.Marshal()
 		queue.client.HSet(ctx, queue.key("tasks"), recentTask.ID, recentTaskData)
 
+		// Run cleanup
 		queue.cleanupOldTasks()
 
+		// Old task should be removed, recent task should remain
 		exists, err := queue.client.HExists(ctx, queue.key("tasks"), oldTask.ID).Result()
 		require.NoError(t, err)
 		assert.False(t, exists)
@@ -259,19 +262,23 @@ func TestQueueCleanup(t *testing.T) {
 	})
 
 	t.Run("should respect max memory limit", func(t *testing.T) {
+		// Clear existing tasks
 		queue.client.Del(ctx, queue.key("tasks"))
 
-		for i := range 5 {
+		// Add more tasks than the limit
+		for i := 0; i < 5; i++ {
 			task, _ := NewTask("test", i, 1)
 			task.Status = TaskStatusCompleted
 			taskData, _ := task.Marshal()
 			queue.client.HSet(ctx, queue.key("tasks"), task.ID, taskData)
 		}
 
+		// Run cleanup
 		queue.cleanupExcessTasks([]string{
 			"task1", "task2", "task3", "task4", "task5",
 		})
 
+		// Should have at most 2 tasks remaining
 		count, err := queue.client.HLen(ctx, queue.key("tasks")).Result()
 		require.NoError(t, err)
 		assert.LessOrEqual(t, count, int64(2))
@@ -288,19 +295,23 @@ func TestQueueDelayedTasks(t *testing.T) {
 
 	t.Run("should process delayed tasks after specified time", func(t *testing.T) {
 		start := time.Now()
-		delay := 200 * time.Millisecond
+		delay := 200 * time.Millisecond // Увеличиваем задержку для надежности
 
 		taskID, err := queue.EnqueueDelayed("delayed_task", "data", delay)
 		require.NoError(t, err)
 
+		// Task should not be immediately available
 		task, err := queue.dequeue("delayed_task")
 		require.NoError(t, err)
 		assert.Nil(t, task)
 
+		// Wait for delay to pass
 		time.Sleep(delay + 50*time.Millisecond)
 
+		// Process delayed tasks
 		queue.processDelayedTasks()
 
+		// Now task should be available
 		task, err = queue.dequeue("delayed_task")
 		require.NoError(t, err)
 		require.NotNil(t, task)

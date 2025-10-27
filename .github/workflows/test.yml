@@ -2,36 +2,12 @@ name: Go Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  test-unit:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: '1.21'
-        
-    - name: Install dependencies
-      run: |
-        go mod download
-        go mod verify
-        
-    - name: Run unit tests (no Redis)
-      run: |
-        go test -v -timeout=30s -run="^Test(New|Task|Backoff|Default|Option|Error)" ./...
-        
-    - name: Build
-      run: go build -v ./...
-
-  test-integration:
+  test:
     runs-on: ubuntu-latest
     services:
       redis:
@@ -48,6 +24,9 @@ jobs:
       with:
         go-version: '1.21'
         
+    - name: Install Redis CLI
+      run: sudo apt-get update && sudo apt-get install -y redis-tools
+        
     - name: Install dependencies
       run: |
         go mod download
@@ -55,13 +34,21 @@ jobs:
         
     - name: Wait for Redis
       run: |
-        docker run --network host --rm redis:7-alpine redis-cli -h localhost ping || exit 1
-        sleep 5
+        timeout 30s bash -c 'until redis-cli -h localhost ping; do sleep 1; done' || exit 1
         
-    - name: Run integration tests
-      run: |
-        go test -v -timeout=60s -run="^Test(Queue|Worker|Integration)" ./...
+    - name: Run unit tests
+      run: go test -v -timeout=30s -run="^Test(New|Task|Queue|Worker|Backoff|Default|Option)" ./...
       
-    - name: Run tests with race detector
-      run: |
-        go test -race -timeout=60s -run="^Test(Queue|Worker|Integration)" ./...
+    - name: Run integration tests
+      run: go test -v -timeout=60s -run="^TestIntegration" ./...
+      
+    - name: Run all tests with race detector
+      run: go test -race -timeout=60s ./...
+      
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        
+    - name: Build
+      run: go build -v ./...
