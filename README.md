@@ -132,7 +132,7 @@ func generateReportHandler(task *gotaskqueue.Task) error {
 
 Start the dashboard and visit `http://localhost:8080` to see:
 
-![Dashboard](https://via.placeholder.com/800x400/35495E/FFFFFF?text=TaskQueue+Dashboard)
+![Go TaskQueue Dashboard](https://raw.githubusercontent.com/madebydima/gotaskqueue/main/static/images/dashboard.png)
 
 - Real-time queue statistics
 - Task status overview
