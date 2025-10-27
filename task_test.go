@@ -143,11 +143,13 @@ func TestTaskShouldRetry(t *testing.T) {
 }
 
 func TestTaskJSONCompatibility(t *testing.T) {
+	fixedTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+
 	task := &Task{
 		ID:         "test-id",
 		Type:       "test-type",
 		Data:       []byte(`{"key":"value"}`),
-		CreatedAt:  time.Now().UTC().Truncate(time.Second),
+		CreatedAt:  fixedTime,
 		Retries:    1,
 		MaxRetries: 3,
 		Status:     TaskStatusProcessing,
@@ -166,5 +168,24 @@ func TestTaskJSONCompatibility(t *testing.T) {
 	assert.Equal(t, task.Retries, unmarshaledTask.Retries)
 	assert.Equal(t, task.MaxRetries, unmarshaledTask.MaxRetries)
 	assert.Equal(t, task.Status, unmarshaledTask.Status)
-	assert.WithinDuration(t, task.CreatedAt, unmarshaledTask.CreatedAt, time.Second)
+
+	assert.WithinDuration(t, task.CreatedAt, unmarshaledTask.CreatedAt, time.Millisecond)
+}
+
+func TestTaskWithZeroTime(t *testing.T) {
+	task := &Task{
+		ID:        "test-id",
+		Type:      "test-type",
+		CreatedAt: time.Time{},
+		Status:    TaskStatusPending,
+	}
+
+	data, err := task.Marshal()
+	require.NoError(t, err)
+
+	var unmarshaledTask Task
+	err = json.Unmarshal(data, &unmarshaledTask)
+	require.NoError(t, err)
+
+	assert.True(t, unmarshaledTask.CreatedAt.IsZero())
 }

@@ -3,9 +3,22 @@
 test:
 	go test -v ./...
 
-test-unit:
-	go test -v -run="^Test(New|Task|Queue|Worker|Backoff)" ./...
+# Быстрые тесты без Redis
+test-quick:
+	@echo "Running quick tests without Redis..."
+	go test -v -timeout=30s -run="^Test(ErrorTypes|DefaultOptions|Task|Backoff|NewQueue|NewWorker)" ./...
 
+# Только unit тесты
+test-unit:
+	@echo "Running unit tests..."
+	go test -v -timeout=30s -run="^Test(New|Task|Backoff|Default|Option|Error)" ./...
+
+# Проверка сборки
+test-build:
+	@echo "Testing build..."
+	go build -v ./...
+	@echo "✅ Build successful"
+	
 test-integration:
 	go test -v -run="^TestIntegration" ./...
 

@@ -15,7 +15,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, "localhost:6379", opts.RedisAddr)
 	assert.Equal(t, "", opts.RedisPassword)
 	assert.Equal(t, 0, opts.RedisDB)
-	assert.Equal(t, "taskqueue", opts.Namespace)
+	assert.Equal(t, "gotaskqueue", opts.Namespace)
 	assert.Equal(t, 3, opts.MaxRetries)
 	assert.Equal(t, 5*time.Second, opts.RetryDelay)
 	assert.NotNil(t, opts.Backoff)

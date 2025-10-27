@@ -59,15 +59,41 @@ func (t *Task) UnmarshalData(v any) error {
 }
 
 func (t *Task) Marshal() ([]byte, error) {
-	return json.Marshal(t)
+	type Alias Task
+	return json.Marshal(&struct {
+		CreatedAt string `json:"created_at"`
+		*Alias
+	}{
+		CreatedAt: t.CreatedAt.Format(time.RFC3339Nano),
+		Alias:     (*Alias)(t),
+	})
 }
 
 func UnmarshalTask(data []byte) (*Task, error) {
-	var task Task
-	if err := json.Unmarshal(data, &task); err != nil {
+	type Alias Task
+	aux := &struct {
+		CreatedAt string `json:"created_at"`
+		*Alias
+	}{
+		Alias: (*Alias)(&Task{}),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
 		return nil, err
 	}
-	return &task, nil
+
+	if aux.CreatedAt != "" {
+		parsedTime, err := time.Parse(time.RFC3339Nano, aux.CreatedAt)
+		if err != nil {
+			parsedTime, err = time.Parse(time.RFC3339, aux.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		aux.Alias.CreatedAt = parsedTime
+	}
+
+	return (*Task)(aux.Alias), nil
 }
 
 func (t *Task) ShouldRetry() bool {

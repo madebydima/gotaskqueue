@@ -27,10 +27,10 @@ func TestExponentialBackoff(t *testing.T) {
 		retries  int
 		expected time.Duration
 	}{
-		{0, time.Second},
-		{1, 2 * time.Second},
-		{2, 4 * time.Second},
-		{3, 8 * time.Second},
+		{0, time.Second},     // 1 * 2^0 = 1s
+		{1, 2 * time.Second}, // 1 * 2^1 = 2s
+		{2, 4 * time.Second}, // 1 * 2^2 = 4s
+		{3, 8 * time.Second}, // 1 * 2^3 = 8s
 		{10, time.Minute},
 	}
 
@@ -63,6 +63,7 @@ func TestCompositeBackoff(t *testing.T) {
 		Strategies: []BackoffStrategy{strategy1, strategy2},
 	}
 
+	// Should alternate between strategies
 	assert.Equal(t, time.Second, backoff.NextDelay(0))
 	assert.Equal(t, 2*time.Second, backoff.NextDelay(1))
 	assert.Equal(t, time.Second, backoff.NextDelay(2))
@@ -74,4 +75,20 @@ func TestCompositeBackoffEmpty(t *testing.T) {
 
 	delay := backoff.NextDelay(0)
 	assert.Equal(t, time.Second, delay)
+}
+
+func TestBackoffInterface(t *testing.T) {
+	var backoff BackoffStrategy
+
+	backoff = ConstantBackoff{Delay: time.Second}
+	assert.NotNil(t, backoff)
+
+	backoff = ExponentialBackoff{}
+	assert.NotNil(t, backoff)
+
+	backoff = JitterBackoff{}
+	assert.NotNil(t, backoff)
+
+	backoff = CompositeBackoff{}
+	assert.NotNil(t, backoff)
 }
